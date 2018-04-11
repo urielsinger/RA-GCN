@@ -7,6 +7,7 @@ import sys
 import networkx as nx
 import os
 from scipy.sparse.linalg.eigen.arpack import eigsh
+import tensorflow as tf
 
 """
 All functions are taken verbatim from https://github.com/tkipf/keras-gcn
@@ -200,7 +201,7 @@ def chebyshev_polynomial(X, k):
 
     return T_k
 
-def noamuriel_polynomial(A, k):
+def noamuriel_polynomial(A, k, to_tensor=False):
     """Calculate noamuriel polynomials up to order k. Return a list of sparse matrices."""
     print("Calculating noamuriel polynomials up to order {}...".format(k))
 
@@ -214,6 +215,19 @@ def noamuriel_polynomial(A, k):
 
     for i in range(2, k+1):
         A_k.append(noamuriel_recurrence(A_k[-1], A))
+
+    if to_tensor:
+        # def convert_sparse_matrix_to_sparse_tensor(X):
+        #     coo = X.tocoo().astype(np.float32)
+        #     indices = np.mat([coo.row, coo.col]).transpose()
+        #     return tf.SparseTensor(indices, coo.data, coo.shape)
+        # A_k = [convert_sparse_matrix_to_sparse_tensor(A) for A in A_k]
+        # A_k = tf.sparse_reshape(tf.sparse_concat(axis=1, sp_inputs=A_k), (A.shape[0], A.shape[1], k + 1))
+
+        A_k = np.transpose(np.array([A.todense() for A in A_k]), [1,2,0])
+        # A_k = tf.convert_to_tensor(A_k)
+
+        A_k = [A_k]
 
     return A_k
 
