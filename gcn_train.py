@@ -11,6 +11,7 @@ from utils import *
 import time
 
 # Define parameters
+MODEL = "grcn" # gcn or grcn
 DATASET = 'cora'
 FILTER = 'noamuriel'
 # FILTER = 'localpool'  # 'localpool','chebyshev'
@@ -60,10 +61,16 @@ X_in = Input(shape=(X.shape[1],))
 # Define model architecture
 # NOTE: We pass arguments for graph convolutional layers as a list of tensors.
 # This is somewhat hacky, more elegant options would require rewriting the Layer base class.
-H = Dropout(0.5)(X_in)
-H = GraphResolutionConvolution(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
-H = Dropout(0.5)(H)
-Y = GraphResolutionConvolution(y.shape[1], support, activation='softmax')([H]+G)
+if MODEL == "gcn":
+    H = Dropout(0.5)(X_in)
+    H = GraphConvolution(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
+    H = Dropout(0.5)(H)
+    Y = GraphConvolution(y.shape[1], support, activation='softmax')([H]+G)
+elif MODEL == "grcn":
+    H = Dropout(0.5)(X_in)
+    H = GraphResolutionConvolution(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
+    H = Dropout(0.5)(H)
+    Y = GraphResolutionConvolution(y.shape[1], support, activation='softmax')([H]+G)
 
 # Compile model
 model = Model(inputs=[X_in]+G, outputs=Y)

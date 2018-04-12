@@ -5,27 +5,35 @@ from keras.models import Model
 from keras.optimizers import Adam
 from keras.regularizers import l2
 
-from graph import GraphConvolution
+from graph_attention_layer import GraphAttention,GraphResolutionAttention
 from utils import *
 
 import time
 
 # Define parameters
+MODEL = "GAT" # GAT or GRAT
 DATASET = 'cora'
-FILTER = 'noamuriel'  # 'chebyshev'
-MAX_DEGREE = 2  # maximum polynomial degree
+FILTER = 'affinity'
+# FILTER = 'localpool'  # 'localpool','chebyshev' ,'noamuriel' , affinity
+MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
 NB_EPOCH = 200
-PATIENCE = 10  # early stopping patience
+PATIENCE = 20  # early stopping patience
 
 # Get data
 X, A, y = load_data(dataset=DATASET)
 y_train, y_val, y_test, idx_train, idx_val, idx_test, train_mask = get_splits(y)
-
 # Normalize X
 X /= X.sum(1).reshape(-1, 1)
 
-if FILTER == 'localpool':
+if FILTER == 'affinity':
+    """ As in the original paper, A is the affinity matrix """
+    print('Using plain affinity matrix filters...')
+    support = 1
+    graph = [X, A]
+    G = [Input(shape=(None, None), batch_shape=(None, None), sparse=False)]
+
+elif FILTER == 'localpool':
     """ Local pooling filters (see 'renormalization trick' in Kipf & Welling, arXiv 2016) """
     print('Using local pooling filters...')
     A_ = preprocess_adj(A, SYM_NORM)
@@ -40,30 +48,38 @@ elif FILTER == 'chebyshev':
     L_scaled = rescale_laplacian(L)
     T_k = chebyshev_polynomial(L_scaled, MAX_DEGREE)
     support = MAX_DEGREE + 1
-    graph = [X]+T_k
+    graph = [X] + T_k
     G = [Input(shape=(None, None), batch_shape=(None, None), sparse=True) for _ in range(support)]
 
 elif FILTER == 'noamuriel':
     """ noamuriel polynomial basis filters (Defferard et al., NIPS 2016)  """
     print('Using noamuriel polynomial basis filters...')
     A_norm = normalize_adj(A, SYM_NORM)
-    A_k = noamuriel_polynomial(A_norm, MAX_DEGREE)
+    A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
     support = MAX_DEGREE + 1
     graph = [X] + A_k
-    G = [Input(shape=(None, None), batch_shape=(None, None), sparse=True) for _ in range(support)]
+    G = [Input(shape=(None, None, support), batch_shape=(None, None, support), sparse=False)]
 
 else:
     raise Exception('Invalid filter type.')
+
+
 
 X_in = Input(shape=(X.shape[1],))
 
 # Define model architecture
 # NOTE: We pass arguments for graph convolutional layers as a list of tensors.
 # This is somewhat hacky, more elegant options would require rewriting the Layer base class.
-H = Dropout(0.5)(X_in)
-H = GraphConvolution(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
-H = Dropout(0.5)(H)
-Y = GraphConvolution(y.shape[1], support, activation='softmax')([H]+G)
+if MODEL == "GRAT":
+    H = Dropout(0.5)(X_in)
+    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
+    H = Dropout(0.5)(H)
+    Y = GraphResolutionAttention(y.shape[1], support, activation='softmax')([H]+G)
+elif MODEL == "GAT":
+    H = Dropout(0.5)(X_in)
+    H = GraphAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
+    H = Dropout(0.5)(H)
+    Y = GraphAttention(y.shape[1], support, activation='softmax')([H]+G)
 
 # Compile model
 model = Model(inputs=[X_in]+G, outputs=Y)
