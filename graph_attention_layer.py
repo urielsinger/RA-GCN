@@ -243,7 +243,13 @@ class GraphResolutionAttention(Layer):
                 # Add nonlinearty
                 dense = LeakyReLU(alpha=0.2)(dense)
 
+                if self.weight_mask == True:
+                    # masking with weights of path (giving structure additional meaning)
+                    dense = dense * A
+
                 # Mask values before activation (Vaswani et al., 2017)
+                # TODO: try different comparison like zeroing nonlikely paths
+                # TODO: K.less_equal(A, K.const(1e-15))
                 comparison = K.equal(A, K.constant(0.))
                 mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
                 masked = K.sum(dense * mask, axis=2) # 3rd dim element-wise dot product
@@ -257,10 +263,13 @@ class GraphResolutionAttention(Layer):
                 # dense = K.expand_dims(dense, axis=2)  # we add the extra dimension:
                 # dense = K.repeat_elements(dense, rep=self.num_hops, axis=2)  # we replicate the elements
 
+                if self.weight_mask == True:
+                    # masking with weights of path (giving structure additional meaning)
+                    dense = dense * A
+
                 # Mask values before activation (Vaswani et al., 2017)
                 comparison = K.equal(A, K.constant(0.))
                 mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
-
                 masked = tf.tensordot(dense + mask, self.resolution_kernel, axes=[2, 0]) # (N x N), attention coefficients
 
             # Feed masked values to softmax
@@ -311,6 +320,7 @@ class GraphResolutionAttention(Layer):
             raise ValueError('Possbile reduction methods: concat, average')
 
         self.attn_mode = kwargs.pop("attention_mode", "gat")
+        self.weight_mask = kwargs.pop("weight_mask", False)
         self.F_ = F_  # Number of output features (F' in the paper)
         self.attn_heads = attn_heads  # Number of attention heads (K in the paper)
         self.attn_heads_reduction = attn_heads_reduction  # 'concat' or 'average' (Eq 5 and 6 in the paper)

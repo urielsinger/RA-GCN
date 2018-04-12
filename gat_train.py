@@ -11,12 +11,16 @@ from utils import *
 import time
 
 # Define parameters
-MODEL = "GRAT" # GAT or GRAT
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK = ("GAT",'affinity', None, False) # base implementation
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK = ("GRAT",'affinity_k',"full", True) # our modifications
+
+# MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention
-ATTN_MODE = 'full' # 'layerwise' (1 x K),'full' (2F' x K),'gat' (2F' x 1)
+# ATTN_MODE = 'full' # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
+# FILTER = 'affinity' # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
+
 DATASET = 'cora'
 # specifies the type of the Affinity kernel
-FILTER = 'noamuriel' # 'localpool','chebyshev' ,'noamuriel' , 'affinity'
 MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
 NB_EPOCH = 200
@@ -73,10 +77,11 @@ X_in = Input(shape=(X.shape[1],))
 # NOTE: We pass arguments for graph convolutional layers as a list of tensors.
 # This is somewhat hacky, more elegant options would require rewriting the Layer base class.
 if MODEL == "GRAT":
+    param = dict(attention_mode=ATTN_MODE,weight_mask=WEIGHT_MASK)
     H = Dropout(0.5)(X_in)
-    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), attention_mode=ATTN_MODE)([H]+G)
+    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), **param)([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphResolutionAttention(y.shape[1], support, activation='softmax', attention_mode=ATTN_MODE)([H]+G)
+    Y = GraphResolutionAttention(y.shape[1], support, activation='softmax', **param)([H]+G)
 elif MODEL == "GAT":
     H = Dropout(0.5)(X_in)
     H = GraphAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
