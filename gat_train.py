@@ -11,10 +11,12 @@ from utils import *
 import time
 
 # Define parameters
-MODEL = "GAT" # GAT or GRAT
+MODEL = "GRAT" # GAT or GRAT
+# specifies the type of attention
+ATTN_MODE = 'full' # 'layerwise' (1 x K),'full' (2F' x K),'gat' (2F' x 1)
 DATASET = 'cora'
-FILTER = 'affinity'
-# FILTER = 'localpool'  # 'localpool','chebyshev' ,'noamuriel' , affinity
+# specifies the type of the Affinity kernel
+FILTER = 'noamuriel' # 'localpool','chebyshev' ,'noamuriel' , 'affinity'
 MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
 NB_EPOCH = 200
@@ -51,10 +53,10 @@ elif FILTER == 'chebyshev':
     graph = [X] + T_k
     G = [Input(shape=(None, None), batch_shape=(None, None), sparse=True) for _ in range(support)]
 
-elif FILTER == 'noamuriel':
+elif FILTER in ['noamuriel','affinity_k']:
     """ noamuriel polynomial basis filters (Defferard et al., NIPS 2016)  """
-    print('Using noamuriel polynomial basis filters...')
-    A_norm = normalize_adj(A, SYM_NORM)
+    print(f'Using {FILTER} polynomial basis filters...')
+    A_norm = normalize_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A
     A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
     support = MAX_DEGREE + 1
     graph = [X] + A_k
@@ -72,9 +74,9 @@ X_in = Input(shape=(X.shape[1],))
 # This is somewhat hacky, more elegant options would require rewriting the Layer base class.
 if MODEL == "GRAT":
     H = Dropout(0.5)(X_in)
-    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
+    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), attention_mode=ATTN_MODE)([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphResolutionAttention(y.shape[1], support, activation='softmax')([H]+G)
+    Y = GraphResolutionAttention(y.shape[1], support, activation='softmax', attention_mode=ATTN_MODE)([H]+G)
 elif MODEL == "GAT":
     H = Dropout(0.5)(X_in)
     H = GraphAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
