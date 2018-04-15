@@ -11,8 +11,11 @@ from utils import *
 import time
 
 # Define parameters
-MODEL, FILTER, ATTN_MODE, WEIGHT_MASK = ("GAT",'affinity', None, False) # base implementation
-MODEL, FILTER, ATTN_MODE, WEIGHT_MASK = ("GRAT",'affinity_k',"full", True) # our modifications
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
+    ("GAT",'affinity', None, False, 20, 10) # base implementation
+
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
+    ("GRAT",'affinity_k',"full", True, 20, 10) # our modifications
 
 # MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention
@@ -23,8 +26,8 @@ DATASET = 'cora'
 # specifies the type of the Affinity kernel
 MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
-NB_EPOCH = 200
-PATIENCE = 20  # early stopping patience
+NB_EPOCH = 300
+PATIENCE = 40  # early stopping patience
 
 # Get data
 X, A, y = load_data(dataset=DATASET)
@@ -54,7 +57,7 @@ elif FILTER == 'chebyshev':
     L_scaled = rescale_laplacian(L)
     T_k = chebyshev_polynomial(L_scaled, MAX_DEGREE)
     support = MAX_DEGREE + 1
-    graph = [X] + T_k
+    graph = [X] + T_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS)
     G = [Input(shape=(None, None), batch_shape=(None, None), sparse=True) for _ in range(support)]
 
 elif FILTER in ['noamuriel','affinity_k']:
@@ -63,7 +66,7 @@ elif FILTER in ['noamuriel','affinity_k']:
     A_norm = normalize_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A
     A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
     support = MAX_DEGREE + 1
-    graph = [X] + A_k
+    graph = [X] + A_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS)
     G = [Input(shape=(None, None, support), batch_shape=(None, None, support), sparse=False)]
 
 else:
@@ -77,7 +80,7 @@ X_in = Input(shape=(X.shape[1],))
 # NOTE: We pass arguments for graph convolutional layers as a list of tensors.
 # This is somewhat hacky, more elegant options would require rewriting the Layer base class.
 if MODEL == "GRAT":
-    param = dict(attention_mode=ATTN_MODE,weight_mask=WEIGHT_MASK)
+    param = dict(attention_mode=ATTN_MODE,weight_mask=WEIGHT_MASK, l_bias = L_BIAS)
     H = Dropout(0.5)(X_in)
     H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), **param)([H]+G)
     H = Dropout(0.5)(H)

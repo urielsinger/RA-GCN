@@ -1,10 +1,20 @@
 from __future__ import print_function
 
+from concurrent.futures.thread import ThreadPoolExecutor
+from functools import partial
+
+import scipy
 import scipy.sparse as sp
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from multiprocessing import cpu_count
+import bisect
+from scipy.spatial.distance import cosine as cosine_dist
 import numpy as np
 import pickle as pkl
 import sys
 import networkx as nx
+from tqdm import tqdm
 import os
 from scipy.sparse.linalg.eigen.arpack import eigsh
 import tensorflow as tf
@@ -158,6 +168,96 @@ def preprocess_adj(adj, symmetric=True):
     adj = adj + sp.eye(adj.shape[0])
     adj = normalize_adj(adj, symmetric)
     return adj
+
+
+def get_nonego_simmilarity_vec(source_node, data , ind_list, cutoff
+                               , simm_fun = lambda x,y: 1 - cosine_dist(x,y)
+                               , sparseflag = False):
+    """
+    returns a vector with most similar values of nodes from @ind_list
+    :param source_node:
+    :param data:
+    :param ind_list:
+    :param cutoff:
+    :param simm_fun:
+    :return:
+    """
+    f_ref = data[source_node]
+    out = np.zeros((1,data.shape[0]))
+    out = scipy.sparse.dok_matrix(out) if sparseflag else out
+    rank = []
+    for n in ind_list:
+        bisect.insort(rank,(simm_fun(f_ref, data[n,:]), n))
+    for r,n in rank[::-1][:cutoff]:
+        out[0,n] = r
+    return out
+
+def tqdm_parallel_map(executor, fn, *iterables, **kwargs):
+    """
+    Equivalent to executor.map(fn, *iterables),
+    but displays a tqdm-based progress bar.
+
+    Does not support timeout or chunksize as executor.submit is used internally
+
+    **kwargs is passed to tqdm.
+    """
+    futures_list = []
+    for iterable in iterables:
+        futures_list += [executor.submit(fn, i) for i in iterable]
+    for f in tqdm(concurrent.futures.as_completed(futures_list), total=len(futures_list), **kwargs):
+        yield f.result()
+
+
+def get_adjointed_l_bias(X, A, l = None, radius = 5, sparseflag = False, n_jobs = cpu_count()):
+    """
+    Produces a similarity matrix like @A (Adjacency), with similarity values in
+    the @l-most similar nodes which are @radius steps away from source   
+    :param X: data
+    :param A: Adjacency matrix
+    :param l: cutoff value for most similar adjointed nodes
+    :param radius: 
+    :return: 
+    """
+    if l == None:
+        return []
+    else:
+        print(f'building {l}_order bias matrix...')
+        G = nx.from_scipy_sparse_matrix(A) if isinstance(A, scipy.sparse.spmatrix) else \
+            nx.from_numpy_array(A)
+        nodes_set = set(G.nodes)
+        b = []
+        if n_jobs<=1:
+            # no-parallel -     takes 100 sec (1.52 min) for 1000 nodes 2708 iter
+            with tqdm(total = len(nodes_set)) as pbar:
+                for n in G.nodes:
+                    ego_n = nx.ego_graph(G, n, radius = radius, center = False)
+                    non_ego_n = nodes_set - set(ego_n.nodes)
+                    b_itr = get_nonego_simmilarity_vec(n, X, non_ego_n, l, sparseflag = sparseflag)
+                    b.append(b_itr)
+                    pbar.set_description(desc = f"node {n}..")
+                    pbar.update()
+                    # TODO: cache output and parralelize function
+            out = scipy.sparse.vstack(b) if sparseflag else np.vstack(b).squeeze()
+        else:
+            t = tqdm(total=len(G.nodes) / n_jobs)
+
+            def get_n_bias(node, callback):
+                callback()
+                ego_n = nx.ego_graph(G, node, radius=radius, center=False)
+                non_ego_n = nodes_set - set(ego_n.nodes)
+                return  get_nonego_simmilarity_vec(node, X, non_ego_n, l, sparseflag=sparseflag)
+
+            def update():
+                t.update()
+
+            mapped_process = partial(get_n_bias, callback = update)
+
+            # parallel -        takes 4:47 min with 2708 iter
+            with ThreadPoolExecutor(max_workers = n_jobs) as p:
+                b = p.map(mapped_process, G.nodes, chunksize = len(G.nodes) / n_jobs)
+
+            out = scipy.sparse.vstack(list(b)) if sparseflag else np.vstack(list(b)).squeeze()
+        return out
 
 
 def get_splits(y):

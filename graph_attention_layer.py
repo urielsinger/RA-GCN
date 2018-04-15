@@ -235,7 +235,7 @@ class GraphResolutionAttention(Layer):
 
             if self.attn_mode == "full":
                 # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
-                # comment: Neat way to create topliz matrix (diag-const matrix) from two 1-D vectors
+                # comment: Neat way to create Topliz matrix (diag-const matrix) from two 1-D vectors
                 # (v1,v2) with the following sum structure [[v1:+v21],[v1:+v22],...,[v1:+v2N]]
                 dense = K.transpose(K.transpose(K.expand_dims(attn_for_self, 1))
                                     + K.expand_dims(K.transpose(attn_for_neighs), 2)) # (N x N x K) via broadcasting
@@ -248,10 +248,14 @@ class GraphResolutionAttention(Layer):
                     dense = dense * A
 
                 # Mask values before activation (Vaswani et al., 2017)
-                # TODO: try different comparison like zeroing nonlikely paths
-                # TODO: K.less_equal(A, K.const(1e-15))
+                # TODO: try different comparison like zeroing nonlikely paths.
+                # Using mask values will probably dump values very low. Some variations can be tested
+                #   1. comparison = K.less_equal(A, K.const(1e-15))
+                #   2. K.max(dense * mask, axis=2) # take highest value of dense * mask
+                #   3. dense[K.max(mask, axis=2)] # take value of most informative scale
                 comparison = K.equal(A, K.constant(0.))
                 mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
+                mask = activations.softmax(mask,axis=-1)
                 masked = K.sum(dense * mask, axis=2) # 3rd dim element-wise dot product
             else:
                 # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
@@ -321,12 +325,12 @@ class GraphResolutionAttention(Layer):
 
         self.attn_mode = kwargs.pop("attention_mode", "gat")
         self.weight_mask = kwargs.pop("weight_mask", False)
+        self.l_bias = kwargs.pop("l_bias", None)
         self.F_ = F_  # Number of output features (F' in the paper)
         self.attn_heads = attn_heads  # Number of attention heads (K in the paper)
         self.attn_heads_reduction = attn_heads_reduction  # 'concat' or 'average' (Eq 5 and 6 in the paper)
         self.attn_dropout = attn_dropout  # Internal dropout rate for attention coefficients
         self.activation = activations.get(activation)  # Optional nonlinearity (Eq 4 in the paper)
-        self.kernel_initializer = initializers.get(kernel_initializer)
         self.attn_kernel_initializer = initializers.get(attn_kernel_initializer)
         self.resolution_attn_kernel_initializer = initializers.get(resolution_attn_kernel_initializer)
         self.kernel_regularizer = regularizers.get(kernel_regularizer)
