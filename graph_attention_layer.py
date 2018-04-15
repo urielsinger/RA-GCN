@@ -332,6 +332,7 @@ class GraphResolutionAttention(Layer):
         self.attn_dropout = attn_dropout  # Internal dropout rate for attention coefficients
         self.activation = activations.get(activation)  # Optional nonlinearity (Eq 4 in the paper)
         self.attn_kernel_initializer = initializers.get(attn_kernel_initializer)
+        self.kernel_initializer = initializers.get(kernel_initializer)
         self.resolution_attn_kernel_initializer = initializers.get(resolution_attn_kernel_initializer)
         self.kernel_regularizer = regularizers.get(kernel_regularizer)
         self.attn_kernel_regularizer = regularizers.get(attn_kernel_regularizer)

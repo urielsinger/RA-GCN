@@ -15,7 +15,7 @@ MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
     ("GAT",'affinity', None, False, 20, 10) # base implementation
 
 MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
-    ("GRAT",'affinity_k',"full", True, 20, 10) # our modifications
+    ("GRAT",'affinity_k',"full", True, None, 10) # our modifications
 
 # MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention
@@ -57,7 +57,7 @@ elif FILTER == 'chebyshev':
     L_scaled = rescale_laplacian(L)
     T_k = chebyshev_polynomial(L_scaled, MAX_DEGREE)
     support = MAX_DEGREE + 1
-    graph = [X] + T_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS)
+    graph = [X] + T_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS, n_jobs =1)
     G = [Input(shape=(None, None), batch_shape=(None, None), sparse=True) for _ in range(support)]
 
 elif FILTER in ['noamuriel','affinity_k']:
@@ -66,7 +66,7 @@ elif FILTER in ['noamuriel','affinity_k']:
     A_norm = normalize_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A
     A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
     support = MAX_DEGREE + 1
-    graph = [X] + A_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS)
+    graph = [X] + A_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS, n_jobs =1)
     G = [Input(shape=(None, None, support), batch_shape=(None, None, support), sparse=False)]
 
 else:
