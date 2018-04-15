@@ -2,9 +2,10 @@ from __future__ import print_function
 
 from concurrent.futures.thread import ThreadPoolExecutor
 from functools import partial
-
+from itertools import islice, takewhile, repeat
 import scipy
 import scipy.sparse as sp
+import pickle
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from multiprocessing import cpu_count
@@ -208,7 +209,7 @@ def tqdm_parallel_map(executor, fn, *iterables, **kwargs):
         yield f.result()
 
 
-def get_adjointed_l_bias(X, A, l = None, radius = 5, sparseflag = False, n_jobs = cpu_count()):
+def get_adjointed_l_bias(X, A, l = None, radius = 5, sparseflag = False, n_jobs = 1, cache=None):
     """
     Produces a similarity matrix like @A (Adjacency), with similarity values in
     the @l-most similar nodes which are @radius steps away from source   
@@ -221,42 +222,66 @@ def get_adjointed_l_bias(X, A, l = None, radius = 5, sparseflag = False, n_jobs 
     if l == None:
         return []
     else:
-        print(f'building {l}_order bias matrix...')
+        FILE_PATH = os.path.abspath(__file__)
+        DIR_PATH = os.path.dirname(FILE_PATH)
+        DATA_PATH = os.path.join(DIR_PATH, fr'data/{cache}')
+        FILE_NAME = os.path.join(DATA_PATH, f'bias_cache_L{l}_R{radius}.pkl')
+        if cache:
+            if os.path.isfile(FILE_NAME):
+                print(f"Bias mat :: Loading bias matrix from cache...")
+                with open(FILE_NAME, 'rb') as f:
+                    return pickle.load(f)
+
+        def get_n_bias(node, callback = None):
+            """get bias vector for single node"""
+            if callback:
+                callback()
+            ego_n = nx.ego_graph(G, node, radius=radius, center=True)
+            non_ego_n = nodes_set - set(ego_n.nodes)
+            return get_nonego_simmilarity_vec(node, X, non_ego_n, l, sparseflag=sparseflag)
+
+        print(f'Bias mat :: Building {l}_order bias matrix...')
         G = nx.from_scipy_sparse_matrix(A) if isinstance(A, scipy.sparse.spmatrix) else \
             nx.from_numpy_array(A)
         nodes_set = set(G.nodes)
         b = []
+        # TODO: cache output and parralelize function with plain joblib
         if n_jobs<=1:
             # no-parallel -     takes 100 sec (1.52 min) for 1000 nodes 2708 iter
             with tqdm(total = len(nodes_set)) as pbar:
                 for n in G.nodes:
-                    ego_n = nx.ego_graph(G, n, radius = radius, center = False)
-                    non_ego_n = nodes_set - set(ego_n.nodes)
-                    b_itr = get_nonego_simmilarity_vec(n, X, non_ego_n, l, sparseflag = sparseflag)
+                    b_itr = get_n_bias(n)
                     b.append(b_itr)
                     pbar.set_description(desc = f"node {n}..")
                     pbar.update()
-                    # TODO: cache output and parralelize function
             out = scipy.sparse.vstack(b) if sparseflag else np.vstack(b).squeeze()
         else:
-            t = tqdm(total=len(G.nodes) / n_jobs)
-
-            def get_n_bias(node, callback):
-                callback()
-                ego_n = nx.ego_graph(G, node, radius=radius, center=False)
-                non_ego_n = nodes_set - set(ego_n.nodes)
-                return  get_nonego_simmilarity_vec(node, X, non_ego_n, l, sparseflag=sparseflag)
+            n_chunks = round(len(G.nodes)/n_jobs)
+            t = tqdm(total=len(G.nodes))
 
             def update():
                 t.update()
 
-            mapped_process = partial(get_n_bias, callback = update)
+            def get_nlist_bias(nlist, callback):
+                b_parall = []
+                for n in nlist:
+                    b_itr = get_n_bias(n, callback = callback)
+                    b_parall.append(b_itr)
+                return b_parall
+
+            mapped_process = partial(get_nlist_bias, callback = update)
 
             # parallel -        takes 4:47 min with 2708 iter
+            split_every = (lambda n, it: takewhile(bool, (list(islice(it, n)) for _ in repeat(None))))
+            nodes_chunks = list(split_every(n_chunks , iter(G.nodes)))
             with ThreadPoolExecutor(max_workers = n_jobs) as p:
-                b = p.map(mapped_process, G.nodes, chunksize = len(G.nodes) / n_jobs)
+                b = p.map(mapped_process, nodes_chunks, chunksize = n_chunks)
 
             out = scipy.sparse.vstack(list(b)) if sparseflag else np.vstack(list(b)).squeeze()
+        if cache:
+            print(f"Bias mat :: Caching bias matrix...")
+            with open(FILE_NAME,'wb') as f:
+                pickle.dump(out,f)
         return out
 
 

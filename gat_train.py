@@ -4,18 +4,18 @@ from keras.layers import Input, Dropout
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.regularizers import l2
-
+from multiprocessing import cpu_count
 from graph_attention_layer import GraphAttention,GraphResolutionAttention
 from utils import *
 
 import time
 
 # Define parameters
-MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
-    ("GAT",'affinity', None, False, 20, 10) # base implementation
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
+    ("GAT",'affinity', None, False, None, None, None) # base implementation
 
-MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
-    ("GRAT",'affinity_k',"full", True, 20, 10) # our modifications
+# MODEL,FILTER,  ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
+# ("GRAT","affinity_k","layerwise", True, 20, 10, 1) # our modifications
 
 # MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention
@@ -24,10 +24,10 @@ MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS = \
 
 DATASET = 'cora'
 # specifies the type of the Affinity kernel
-MAX_DEGREE = 3  # maximum polynomial degree
+MAX_DEGREE = 2  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
-NB_EPOCH = 300
-PATIENCE = 40  # early stopping patience
+NB_EPOCH = 200
+PATIENCE = 20  # early stopping patience
 
 # Get data
 X, A, y = load_data(dataset=DATASET)
@@ -56,8 +56,11 @@ elif FILTER == 'chebyshev':
     L = normalized_laplacian(A, SYM_NORM)
     L_scaled = rescale_laplacian(L)
     T_k = chebyshev_polynomial(L_scaled, MAX_DEGREE)
-    support = MAX_DEGREE + 1
-    graph = [X] + T_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS)
+    if L_BIAS is not None:
+        Bias = get_adjointed_l_bias(X, A, l=L_BIAS, radius=R_BIAS, n_jobs=N_JOBS, cache=DATASET)
+        T_k = [np.concatenate((T_k[0] ,np.expand_dims(Bias, axis=-1)), axis=-1)]
+    graph = [X] + T_k
+    support = MAX_DEGREE + 1 if L_BIAS is None else MAX_DEGREE + 2
     G = [Input(shape=(None, None), batch_shape=(None, None), sparse=True) for _ in range(support)]
 
 elif FILTER in ['noamuriel','affinity_k']:
@@ -65,8 +68,11 @@ elif FILTER in ['noamuriel','affinity_k']:
     print(f'Using {FILTER} polynomial basis filters...')
     A_norm = normalize_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A
     A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
-    support = MAX_DEGREE + 1
-    graph = [X] + A_k + get_adjointed_l_bias(X, A, l = L_BIAS, radius = R_BIAS)
+    if L_BIAS is not None:
+        Bias = get_adjointed_l_bias(X, A, l=L_BIAS, radius=R_BIAS, n_jobs=N_JOBS, cache=DATASET)
+        A_k = [np.concatenate((A_k[0] ,np.expand_dims(Bias, axis=-1)), axis=-1)]
+    graph = [X] + A_k
+    support = MAX_DEGREE + 1 if L_BIAS is None else MAX_DEGREE + 2
     G = [Input(shape=(None, None, support), batch_shape=(None, None, support), sparse=False)]
 
 else:
@@ -80,7 +86,7 @@ X_in = Input(shape=(X.shape[1],))
 # NOTE: We pass arguments for graph convolutional layers as a list of tensors.
 # This is somewhat hacky, more elegant options would require rewriting the Layer base class.
 if MODEL == "GRAT":
-    param = dict(attention_mode=ATTN_MODE,weight_mask=WEIGHT_MASK, l_bias = L_BIAS)
+    param = dict(attention_mode=ATTN_MODE,weight_mask=WEIGHT_MASK, l_bias=L_BIAS)
     H = Dropout(0.5)(X_in)
     H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), **param)([H]+G)
     H = Dropout(0.5)(H)
