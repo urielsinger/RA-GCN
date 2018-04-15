@@ -85,6 +85,9 @@ class GraphAttention(Layer):
         X = inputs[0]  # Node features (N x F)
         A = inputs[1]  # Adjacency matrix (N x N)
 
+        X = tf.Print(X, [tf.reduce_max(X, None), tf.reduce_min(X, None),X, inputs[1]],
+                                   'input X=', summarize=20, first_n=3)
+
         # Parameters
         N = K.shape(X)[0]  # Number of nodes in the graph
 
@@ -119,6 +122,9 @@ class GraphAttention(Layer):
             # Linear combination with neighbors' features
             node_features = K.dot(dropout, linear_transf_X)  # (N x F')
 
+            node_features = tf.Print(node_features, [tf.reduce_max(node_features, None), tf.reduce_min(node_features, None), node_features],
+                               'node_features  minmax=', summarize=20, first_n=3)
+
             if self.attn_heads_reduction == 'concat' and self.activation is not None:
                 # In case of 'concat', we compute the activation here (Eq 5)
                 node_features = self.activation(node_features)
@@ -129,6 +135,7 @@ class GraphAttention(Layer):
         # Reduce the attention heads output according to the reduction method
         if self.attn_heads_reduction == 'concat':
             output = K.concatenate(outputs)  # (N x KF')
+
         else:
             output = K.mean(K.stack(outputs), axis=0)  # N x F')
             if self.activation is not None:

@@ -11,7 +11,7 @@ from utils import *
 import time
 
 # Define parameters
-MODEL = "grcn" # gcn or grcn
+MODEL = "gcn" # gcn or grcn
 DATASET = 'cora'
 FILTER = 'noamuriel'
 # FILTER = 'localpool'  # 'localpool','chebyshev'
@@ -21,8 +21,13 @@ NB_EPOCH = 200
 PATIENCE = 20  # early stopping patience
 
 # Get data
-X, A, y = load_data(dataset=DATASET)
-y_train, y_val, y_test, idx_train, idx_val, idx_test, train_mask = get_splits(y)
+# X, A, y = load_data_cora(dataset=DATASET)
+# y_train, y_val, y_test, idx_train, idx_val, idx_test, train_mask = get_splits(y)
+
+A, X, y_train, y_val, y_test, train_mask, val_mask, test_mask = load_data(DATASET)
+idx_val, idx_train, idx_test = map(lambda x: np.where(x)[0].tolist(),[val_mask, train_mask, test_mask])
+number_classes = y_train.shape[1]
+
 # Normalize X
 X /= X.sum(1).reshape(-1, 1)
 
@@ -65,12 +70,12 @@ if MODEL == "gcn":
     H = Dropout(0.5)(X_in)
     H = GraphConvolution(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphConvolution(y.shape[1], support, activation='softmax')([H]+G)
+    Y = GraphConvolution(number_classes, support, activation='softmax')([H]+G)
 elif MODEL == "grcn":
     H = Dropout(0.5)(X_in)
     H = GraphResolutionConvolution(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphResolutionConvolution(y.shape[1], support, activation='softmax')([H]+G)
+    Y = GraphResolutionConvolution(number_classes, support, activation='softmax')([H]+G)
 
 # Compile model
 model = Model(inputs=[X_in]+G, outputs=Y)

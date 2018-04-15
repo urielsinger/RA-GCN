@@ -43,9 +43,11 @@ def sample_mask(idx, l):
 
 def load_data(dataset_str):
     """Load data."""
+    print('Loading {} dataset...'.format(dataset_str))
+
     FILE_PATH = os.path.abspath(__file__)
     DIR_PATH = os.path.dirname(FILE_PATH)
-    DATA_PATH = os.path.join(DIR_PATH, 'data/')
+    DATA_PATH = os.path.join(DIR_PATH, f'data/{dataset_str}/')
 
     names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']
     objects = []
@@ -93,7 +95,7 @@ def load_data(dataset_str):
     y_val[val_mask, :] = labels[val_mask, :]
     y_test[test_mask, :] = labels[test_mask, :]
 
-    return adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask
+    return adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask, idx_test, idx_val, idx_train
 
 
 def categorical_crossentropy(preds, labels):
@@ -122,7 +124,7 @@ def encode_onehot(labels):
     return labels_onehot
 
 
-def load_data(path="data", dataset="cora"):
+def load_data_cora(path="data", dataset="cora"):
     """Load citation network dataset (cora only for now)"""
     print('Loading {} dataset...'.format(dataset))
 
@@ -224,7 +226,9 @@ def get_adjointed_l_bias(X, A, l = None, radius = 5, sparseflag = False, n_jobs 
     else:
         FILE_PATH = os.path.abspath(__file__)
         DIR_PATH = os.path.dirname(FILE_PATH)
-        DATA_PATH = os.path.join(DIR_PATH, fr'data/{cache}')
+        DATA_PATH = os.path.join(DIR_PATH, fr'data/{cache}/cache')
+        if not os.path.isdir(DATA_PATH):
+            os.mkdir(DATA_PATH)
         FILE_NAME = os.path.join(DATA_PATH, f'bias_cache_L{l}_R{radius}.pkl')
         if cache:
             if os.path.isfile(FILE_NAME):
@@ -372,3 +376,54 @@ def sparse_to_tuple(sparse_mx):
     values = sparse_mx.data
     shape = sparse_mx.shape
     return coords, values, shape
+
+
+## functions taken from https://github.com/PetarV-/GAT/
+def standardize_data(f, train_mask):
+    """Standardize feature matrix and convert to tuple representation"""
+    # standardize data
+    f = f.todense()
+    mu = f[train_mask == True, :].mean(axis=0)
+    sigma = f[train_mask == True, :].std(axis=0)
+    f = f[:, np.squeeze(np.array(sigma > 0))]
+    mu = f[train_mask == True, :].mean(axis=0)
+    sigma = f[train_mask == True, :].std(axis=0)
+    f = (f - mu) / sigma
+    return f
+
+def preprocess_features(features):
+    """Row-normalize feature matrix and convert to tuple representation"""
+    rowsum = np.array(features.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.
+    r_mat_inv = sp.diags(r_inv)
+    features = r_mat_inv.dot(features)
+    return features.todense(), sparse_to_tuple(features)
+
+# def normalize_adj(adj):
+#     """Symmetrically normalize adjacency matrix."""
+#     adj = sp.coo_matrix(adj)
+#     rowsum = np.array(adj.sum(1))
+#     d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+#     d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
+#     d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
+#     return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt).tocoo()
+
+
+def preprocess_adj(adj):
+    """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
+    adj_normalized = normalize_adj(adj + sp.eye(adj.shape[0]))
+    return sparse_to_tuple(adj_normalized)
+
+def adj_to_bias(adj, sizes, nhood=1):
+    nb_graphs = adj.shape[0]
+    mt = np.empty(adj.shape)
+    for g in range(nb_graphs):
+        mt[g] = np.eye(adj.shape[1])
+        for _ in range(nhood):
+            mt[g] = np.matmul(mt[g], (adj[g] + np.eye(adj.shape[1])))
+        for i in range(sizes[g]):
+            for j in range(sizes[g]):
+                if mt[g][i][j] > 0.0:
+                    mt[g][i][j] = 1.0
+    return -1e9 * (1.0 - mt)

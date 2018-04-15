@@ -11,6 +11,7 @@ from utils import *
 import time
 
 # Define parameters
+DATASET = 'citeseer' # citeseer, cora
 MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
     ("GAT",'affinity', None, False, None, None, None) # base implementation
 
@@ -22,16 +23,26 @@ MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
 # ATTN_MODE = 'full' # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
 # FILTER = 'affinity' # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
 
-DATASET = 'cora'
+
 # specifies the type of the Affinity kernel
 MAX_DEGREE = 2  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
 NB_EPOCH = 200
-PATIENCE = 20  # early stopping patience
+PATIENCE = 10  # early stopping patience
 
 # Get data
-X, A, y = load_data(dataset=DATASET)
-y_train, y_val, y_test, idx_train, idx_val, idx_test, train_mask = get_splits(y)
+A, X, y_train, y_val, y_test, train_mask, val_mask, test_mask, idx_test, idx_val, idx_train = load_data(DATASET)
+number_classes = y_train.shape[1]
+
+# thresh = 2000
+# idx_test = [k for k,v in zip(idx_test,idx_test) if v < thresh ]
+# idx_val = [k for k,v in zip(idx_val,idx_test) if v < thresh ]
+# idx_train = [k for k,v in zip(idx_train,idx_test) if v < thresh ]
+# A = A[:2500, :2500]
+# X = X[:2500,:]
+# y_train = y_train[:2500,:]
+# train_mask = train_mask[:2500]
+
 # Normalize X
 X /= X.sum(1).reshape(-1, 1)
 
@@ -90,12 +101,12 @@ if MODEL == "GRAT":
     H = Dropout(0.5)(X_in)
     H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), **param)([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphResolutionAttention(y.shape[1], support, activation='softmax', **param)([H]+G)
+    Y = GraphResolutionAttention(number_classes , support, activation='softmax', **param)([H]+G)
 elif MODEL == "GAT":
     H = Dropout(0.5)(X_in)
     H = GraphAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphAttention(y.shape[1], support, activation='softmax')([H]+G)
+    Y = GraphAttention(number_classes , support, activation='softmax')([H]+G)
 
 # Compile model
 model = Model(inputs=[X_in]+G, outputs=Y)
