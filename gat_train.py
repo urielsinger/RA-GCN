@@ -14,6 +14,7 @@ import time
 DATASET = 'citeseer' # citeseer, cora
 MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
     ("GAT",'affinity', None, False, None, None, None) # base implementation
+    # ("GRAT", 'affinity_k', "full", True, None, 10, None)  # our modifications
 
 # MODEL,FILTER,  ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
 # ("GRAT","affinity_k","layerwise", True, 20, 10, 1) # our modifications
@@ -25,10 +26,10 @@ MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
 
 
 # specifies the type of the Affinity kernel
-MAX_DEGREE = 2  # maximum polynomial degree
+MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
-NB_EPOCH = 200
-PATIENCE = 10  # early stopping patience
+NB_EPOCH = 300
+PATIENCE = 40  # early stopping patience
 
 # Get data
 A, X, y_train, y_val, y_test, train_mask, val_mask, test_mask, idx_test, idx_val, idx_train = load_data(DATASET)

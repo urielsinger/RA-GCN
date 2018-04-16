@@ -94,10 +94,14 @@ class GraphAttention(Layer):
         outputs = []
         for head in range(self.attn_heads):
             kernel = self.kernels[head]  # W in the paper (F x F')
-            attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F' x 1)
 
             # Compute inputs to attention network
+            attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F' x 1)
+
             linear_transf_X = K.dot(X, kernel)  # (N x F')
+
+            linear_transf_X = tf.Print(linear_transf_X, [tf.reduce_max(linear_transf_X, None), tf.reduce_min(linear_transf_X, None), linear_transf_X],
+                         'linear_transf_X =', summarize=20, first_n=3)
 
             # Compute feature combinations
             # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]] = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
@@ -110,14 +114,28 @@ class GraphAttention(Layer):
             # Add nonlinearty
             dense = LeakyReLU(alpha=0.2)(dense)
 
+            dense = tf.Print(dense, [tf.reduce_max(dense, None), tf.reduce_min(dense, None), dense],
+                         'dense =', summarize=20, first_n=3)
+
             # Mask values before activation (Vaswani et al., 2017)
             comparison = K.equal(A, K.constant(0.))
             mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
-            masked = dense + mask
+            masked = (K.constant(10.) * dense) + mask
+
+            masked = tf.Print(masked, [tf.reduce_max(masked, None), tf.reduce_min(masked, None), masked.summary() ],
+                         'masked =', summarize=20, first_n=3)
 
             # Feed masked values to softmax
+            # FIXME: in the original implementation there is an additional bias mat (see Petar-V)
             softmax = K.softmax(masked)  # (N x N), attention coefficients
+
+            softmax = tf.Print(softmax, [tf.reduce_max(softmax, None), tf.reduce_min(softmax, None), softmax],
+                         'softmax =', summarize=20, first_n=3)
+
             dropout = Dropout(self.attn_dropout)(softmax)  # (N x N)
+
+            dropout = tf.Print(dropout, [tf.reduce_max(dropout, None), tf.reduce_min(dropout, None), dropout],
+                         'dropout =', summarize=20, first_n=3)
 
             # Linear combination with neighbors' features
             node_features = K.dot(dropout, linear_transf_X)  # (N x F')
