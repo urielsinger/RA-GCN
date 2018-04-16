@@ -120,13 +120,12 @@ class GraphAttention(Layer):
             # Mask values before activation (Vaswani et al., 2017)
             comparison = K.equal(A, K.constant(0.))
             mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
-            masked = (K.constant(10.) * dense) + mask
+            masked = dense + mask
 
-            masked = tf.Print(masked, [tf.reduce_max(masked, None), tf.reduce_min(masked, None), masked.summary() ],
+            masked = tf.Print(masked, [tf.reduce_max(masked, None), tf.reduce_min(masked, None), masked ],
                          'masked =', summarize=20, first_n=3)
 
             # Feed masked values to softmax
-            # FIXME: in the original implementation there is an additional bias mat (see Petar-V)
             softmax = K.softmax(masked)  # (N x N), attention coefficients
 
             softmax = tf.Print(softmax, [tf.reduce_max(softmax, None), tf.reduce_min(softmax, None), softmax],
@@ -245,7 +244,7 @@ class GraphResolutionAttention(Layer):
         N = K.shape(X)[0]  # Number of nodes in the graph
 
         outputs = []
-        k_repeat = lambda x: K.repeat_elements(K.expand_dims(x, axis = -1), rep = self.num_hops, axis = 2)
+        k_repeat = lambda x: K.repeat_elements(K.expand_dims(x, axis=-1), rep = self.num_hops, axis = 2)
         for head in range(self.attn_heads):
             kernel = self.kernels[head]  # W in the paper (F x F')
             attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F' x 1)
@@ -255,6 +254,7 @@ class GraphResolutionAttention(Layer):
 
             # Compute feature combinations
             # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]] = [a_1k]^T [Wh_i] + [a_2k]^T [Wh_j]
+            # TODO: normalize attention with softmax in K dim
             attn_for_self = K.dot(linear_transf_X, attention_kernel[0])  # (N x 1 x K), [a_1k]^T [Wh_i]
             attn_for_neighs = K.dot(linear_transf_X, attention_kernel[1])  # (N x 1 x K), [a_2k]^T [Wh_j]
 
@@ -280,8 +280,8 @@ class GraphResolutionAttention(Layer):
                 #   3. dense[K.max(mask, axis=2)] # take value of most informative scale
                 comparison = K.equal(A, K.constant(0.))
                 mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
-                mask = activations.softmax(mask,axis=-1)
-                masked = K.sum(dense * mask, axis=2) # 3rd dim element-wise dot product
+                masked = activations.softmax(dense + mask,axis=-1)
+                softmax = K.mean(masked, axis=2)  # 3rd dim element-wise dot product
             else:
                 # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
                 dense = attn_for_self + K.transpose(attn_for_neighs)  # (N x N) via broadcasting
@@ -301,8 +301,8 @@ class GraphResolutionAttention(Layer):
                 mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
                 masked = tf.tensordot(dense + mask, self.resolution_kernel, axes=[2, 0]) # (N x N), attention coefficients
 
-            # Feed masked values to softmax
-            softmax = K.softmax(masked)  # (N x N), attention coefficients
+                # Feed masked values to softmax
+                softmax = K.softmax(masked)  # (N x N), attention coefficients
             dropout = Dropout(self.attn_dropout)(softmax)  # (N x N)
 
             # Linear combination with neighbors' features

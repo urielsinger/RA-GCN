@@ -11,10 +11,10 @@ from utils import *
 import time
 
 # Define parameters
-DATASET = 'citeseer' # citeseer, cora
+DATASET = 'cora' # citeseer, cora
 MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
-    ("GAT",'affinity', None, False, None, None, None) # base implementation
-    # ("GRAT", 'affinity_k', "full", True, None, 10, None)  # our modifications
+("GRAT", 'noamuriel', "full", True, None, 3, None)  # our modifications
+    # ("GAT",'affinity', None, False, None, None, None) # base implementation
 
 # MODEL,FILTER,  ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
 # ("GRAT","affinity_k","layerwise", True, 20, 10, 1) # our modifications
