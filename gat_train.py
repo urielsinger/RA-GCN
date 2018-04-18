@@ -12,12 +12,20 @@ import time
 
 # Define parameters
 DATASET = 'cora' # citeseer, cora
-MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
-("GRAT", 'noamuriel', "full", True, None, 3, None)  # our modifications
-    # ("GAT",'affinity', None, False, None, None, None) # base implementation
+
+MODEL = "GRAT"
+FILTER = 'affinity_k'
+ATTN_MODE = "full"
+WEIGHT_MASK = True
+L_BIAS = None
+R_BIAS = 3
+N_JOBS = None
+
+# MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
+#     ("GAT",'affinity', None, False, None, None, None) # base implementation
 
 # MODEL,FILTER,  ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
-# ("GRAT","affinity_k","layerwise", True, 20, 10, 1) # our modifications
+# ("GRAT","affinity_k","layerwise", True, None, 10, 1) # our modifications
 
 # MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention

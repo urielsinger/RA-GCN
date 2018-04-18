@@ -265,14 +265,14 @@ class GraphResolutionAttention(Layer):
                 dense = K.transpose(K.transpose(K.expand_dims(attn_for_self, 1))
                                     + K.expand_dims(K.transpose(attn_for_neighs), 2)) # (N x N x K) via broadcasting
 
-                # Add nonlinearty
-                dense = LeakyReLU(alpha=0.2)(dense)
-
                 if self.weight_mask == True:
                     # masking with weights of path (giving structure additional meaning)
                     dense = dense * A
 
                 # Mask values before activation (Vaswani et al., 2017)
+                # Add nonlinearty
+                dense = LeakyReLU(alpha=0.2)(dense)
+
                 # TODO: try different comparison like zeroing nonlikely paths.
                 # Using mask values will probably dump values very low. Some variations can be tested
                 #   1. comparison = K.less_equal(A, K.const(1e-15))
