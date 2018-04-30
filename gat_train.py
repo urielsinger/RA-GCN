@@ -6,17 +6,19 @@ from keras.optimizers import Adam
 from keras.regularizers import l2
 from multiprocessing import cpu_count
 from graph_attention_layer import GraphAttention,GraphResolutionAttention
+from keras.callbacks import TensorBoard
 from utils import *
+import datetime
 
 import time
 
 # Define parameters
 DATASET = 'cora' # citeseer, cora
 
-MODEL = "GRAT"
-FILTER = 'affinity_k'
-ATTN_MODE = "full"
-WEIGHT_MASK = True
+MODEL = "GRAT"          # GAT (goes with 'affinity' FILTER)  or GRAT
+FILTER = 'noamuriel'    # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
+ATTN_MODE = "full"      # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
+WEIGHT_MASK = False
 L_BIAS = None
 R_BIAS = 3
 N_JOBS = None
@@ -38,6 +40,10 @@ MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
 NB_EPOCH = 300
 PATIENCE = 40  # early stopping patience
+
+print(f"{'#'*150}\nExperiment description -\n"
+      f"\t dataset='{DATASET}'\t model='{MODEL}'\t moments='{FILTER}'\t attn_mode='{ATTN_MODE}'"
+      f"\t weigthed_mask={WEIGHT_MASK}\t bias_mat={L_BIAS}\n{'#'*150}")
 
 # Get data
 A, X, y_train, y_val, y_test, train_mask, val_mask, test_mask, idx_test, idx_val, idx_train = load_data(DATASET)
@@ -108,14 +114,14 @@ X_in = Input(shape=(X.shape[1],))
 if MODEL == "GRAT":
     param = dict(attention_mode=ATTN_MODE,weight_mask=WEIGHT_MASK, l_bias=L_BIAS)
     H = Dropout(0.5)(X_in)
-    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), **param)([H]+G)
+    H = GraphResolutionAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4), gcn_layer_name='GRCN_L1', **param)([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphResolutionAttention(number_classes , support, activation='softmax', **param)([H]+G)
+    Y = GraphResolutionAttention(number_classes , support, activation='softmax',gcn_layer_name='GRCN_L2', **param)([H]+G)
 elif MODEL == "GAT":
     H = Dropout(0.5)(X_in)
-    H = GraphAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4))([H]+G)
+    H = GraphAttention(16, support, activation='relu', kernel_regularizer=l2(5e-4),gcn_layer_name='GRCN_L1')([H]+G)
     H = Dropout(0.5)(H)
-    Y = GraphAttention(number_classes , support, activation='softmax')([H]+G)
+    Y = GraphAttention(number_classes , support, activation='softmax', gcn_layer_name='GRCN_L2')([H]+G)
 
 # Compile model
 model = Model(inputs=[X_in]+G, outputs=Y)
@@ -126,27 +132,56 @@ wait = 0
 preds = None
 best_val_loss = 99999
 
+# define tensorboard
+# tb = TensorBoard(log_dir=f'./tensorboard_logdir'
+#                  , histogram_freq=1, batch_size=32
+#                  , write_graph=True, write_grads=True
+#                  ,write_images=False, embeddings_freq=0
+#                  ,embeddings_layer_names=None, embeddings_metadata=None)
+
 # Fit
+sess = tf.InteractiveSession()
+metric_writer = tf.summary.FileWriter(f"./tensorboard_logdir/{datetime.datetime.now().strftime('%m-%d-%y %H:%M:%S')}",)
+test_writer = tf.summary.FileWriter(f"./tensorboard_logdir/test",)
 for epoch in range(1, NB_EPOCH+1):
 
     # Log wall-clock time
     t = time.time()
 
     # Single training iteration (we mask nodes without labels for loss calculation)
-    model.fit(graph, y_train, sample_weight=train_mask,
-              batch_size=A.shape[0], epochs=1, shuffle=False, verbose=0)
+    if epoch%10 == 0:
+        model.fit(graph, y_train, sample_weight=train_mask,batch_size=A.shape[0]
+                  , epochs=1, shuffle=False, verbose=0)
+    else:
+        history = model.fit(graph, y_train, sample_weight=train_mask,batch_size=A.shape[0], epochs=1, shuffle=False, verbose=0)
 
     # Predict on full dataset
     preds = model.predict(graph, batch_size=A.shape[0])
 
     # Train / validation scores
-    train_val_loss, train_val_acc = evaluate_preds(preds, [y_train, y_val],
-                                                   [idx_train, idx_val])
+    with tf.name_scope(f"metrics"):
+        summary_list = []
+        train_val_loss, train_val_acc = evaluate_preds(preds, [y_train, y_val],[idx_train, idx_val])
+        with tf.name_scope(f"train"):
+            train_loss = train_val_loss[0]
+            summary_list.append(tf.Summary.Value(tag="train_loss", simple_value=train_loss))
+            train_acc = train_val_acc[0]
+            summary_list.append(tf.Summary.Value(tag="train_acc", simple_value=train_acc))
+        with tf.name_scope(f"val"):
+            val_loss = train_val_loss[1]
+            summary_list.append(tf.Summary.Value(tag="val_loss", simple_value=val_loss))
+            val_acc = train_val_acc[1]
+            tf.summary.scalar('val_acc', val_acc)
+            summary_list.append(tf.Summary.Value(tag="val_acc", simple_value=val_acc))
+    # merged = tf.summary.merge_all()
+    summary_train = tf.Summary(value=summary_list)
+    metric_writer.add_summary(summary_train, epoch)
+
     print("Epoch: {:04d}".format(epoch),
-          "train_loss= {:.4f}".format(train_val_loss[0]),
-          "train_acc= {:.4f}".format(train_val_acc[0]),
-          "val_loss= {:.4f}".format(train_val_loss[1]),
-          "val_acc= {:.4f}".format(train_val_acc[1]),
+          "train_loss= {:.4f}".format(train_loss),
+          "train_acc= {:.4f}".format(train_acc),
+          "val_loss= {:.4f}".format(val_loss),
+          "val_acc= {:.4f}".format(val_acc),
           "time= {:.4f}".format(time.time() - t))
 
     # Early stopping
@@ -158,9 +193,12 @@ for epoch in range(1, NB_EPOCH+1):
             print('Epoch {}: early stopping'.format(epoch))
             break
         wait += 1
-
 # Testing
 test_loss, test_acc = evaluate_preds(preds, [y_test], [idx_test])
+test_writer.add_summary(tf.Summary(value=[tf.Summary.Value(tag="test_acc", simple_value=test_acc[0]), \
+                                          tf.Summary.Value(tag="test_loss", simple_value=test_loss[0])]))
+metric_writer.close()
+test_writer.close()
 print("Test set results:",
       "loss= {:.4f}".format(test_loss[0]),
       "accuracy= {:.4f}".format(test_acc[0]))
