@@ -14,7 +14,7 @@ import time
 
 # Define parameters
 DATASET = 'cora' # citeseer, cora
-
+log_to_tensorboard = True
 MODEL = "GRAT"          # GAT (goes with 'affinity' FILTER)  or GRAT
 FILTER = 'noamuriel'    # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
 ATTN_MODE = "full"      # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
@@ -141,8 +141,10 @@ best_val_loss = 99999
 
 # Fit
 sess = tf.InteractiveSession()
-metric_writer = tf.summary.FileWriter(f"./tensorboard_logdir/{datetime.datetime.now().strftime('%m-%d-%y %H:%M:%S')}",)
-test_writer = tf.summary.FileWriter(f"./tensorboard_logdir/test",)
+tf.global_variables_initializer().run()
+if log_to_tensorboard:
+    metric_writer = tf.summary.FileWriter(f"./tensorboard_logdir/{datetime.datetime.now().strftime('%m-%d-%y %H:%M:%S')}",)
+    test_writer = tf.summary.FileWriter(f"./tensorboard_logdir/test",)
 for epoch in range(1, NB_EPOCH+1):
 
     # Log wall-clock time
@@ -154,6 +156,20 @@ for epoch in range(1, NB_EPOCH+1):
                   , epochs=1, shuffle=False, verbose=0)
     else:
         history = model.fit(graph, y_train, sample_weight=train_mask,batch_size=A.shape[0], epochs=1, shuffle=False, verbose=0)
+
+    # with tf.name_scope("trainable_param"):
+    #     for v in tf.trainable_variables():
+    #         gcn_layer_count = 1
+    #         if "graph_resolution_attention" in v._shared_name:
+    #             with tf.name_scope(f"GCN_layer_{gcn_layer_count}"):
+    #                 att_kernels = []
+    #                 for vv in tf.trainable_variables("graph_resolution_attention_{gcn_layer_count}"):
+    #                     if "kernel" in v._shared_name:
+    #                         tf.summary.histogram('W', v)
+    #                     elif "att_kernel" in v._shared_name:
+    #                         att_kernels.append(v)
+    #                 tf.summary.histogram('att_kernel', att_kernels)
+    #             gcn_layer_count += 1
 
     # Predict on full dataset
     preds = model.predict(graph, batch_size=A.shape[0])
@@ -171,11 +187,16 @@ for epoch in range(1, NB_EPOCH+1):
             val_loss = train_val_loss[1]
             summary_list.append(tf.Summary.Value(tag="val_loss", simple_value=val_loss))
             val_acc = train_val_acc[1]
-            tf.summary.scalar('val_acc', val_acc)
             summary_list.append(tf.Summary.Value(tag="val_acc", simple_value=val_acc))
     # merged = tf.summary.merge_all()
     summary_train = tf.Summary(value=summary_list)
-    metric_writer.add_summary(summary_train, epoch)
+    if log_to_tensorboard:
+        metric_writer.add_summary(summary_train, epoch)
+
+        merged = tf.summary.merge_all()
+        ## TODO: eval merged summary
+        trainable_summary = merged.eval(session=sess, feed_dict={G[0]: graph[1], X_in: graph[0]})
+        metric_writer.add_summary(trainable_summary, epoch)
 
     print("Epoch: {:04d}".format(epoch),
           "train_loss= {:.4f}".format(train_loss),
@@ -195,10 +216,11 @@ for epoch in range(1, NB_EPOCH+1):
         wait += 1
 # Testing
 test_loss, test_acc = evaluate_preds(preds, [y_test], [idx_test])
-test_writer.add_summary(tf.Summary(value=[tf.Summary.Value(tag="test_acc", simple_value=test_acc[0]), \
+if log_to_tensorboard:
+    test_writer.add_summary(tf.Summary(value=[tf.Summary.Value(tag="test_acc", simple_value=test_acc[0]), \
                                           tf.Summary.Value(tag="test_loss", simple_value=test_loss[0])]))
-metric_writer.close()
-test_writer.close()
+    metric_writer.close()
+    test_writer.close()
 print("Test set results:",
       "loss= {:.4f}".format(test_loss[0]),
       "accuracy= {:.4f}".format(test_acc[0]))
