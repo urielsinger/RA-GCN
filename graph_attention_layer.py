@@ -86,79 +86,63 @@ class GraphAttention(Layer):
         X = inputs[0]  # Node features (N x F)
         A = inputs[1]  # Adjacency matrix (N x N)
 
-        X = tf.Print(X, [tf.reduce_max(X, None), tf.reduce_min(X, None),X, inputs[1]],
-                                   'input X=', summarize=20, first_n=3)
-
         # Parameters
         N = K.shape(X)[0]  # Number of nodes in the graph
 
-        outputs = []
-        for head in range(self.attn_heads):
-            kernel = self.kernels[head]  # W in the paper (F x F')
+        with tf.name_scope(self.gcn_layer_name):
+            outputs = []
+            for head in range(self.attn_heads):
+                with tf.name_scope(f'kernel_{head}'):
+                    kernel = self.kernels[head]  # W in the paper (F x F')
+                    variable_summaries(kernel[head])
 
-            # Compute inputs to attention network
-            attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F' x 1)
+                with tf.name_scope(f'attention_{head}'):
+                    # Compute inputs to attention network
+                    attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F' x 1)
+                    variable_summaries(attention_kernel[head])
 
-            linear_transf_X = K.dot(X, kernel)  # (N x F')
+                linear_transf_X = K.dot(X, kernel)  # (N x F')
 
-            linear_transf_X = tf.Print(linear_transf_X, [tf.reduce_max(linear_transf_X, None), tf.reduce_min(linear_transf_X, None), linear_transf_X],
-                         'linear_transf_X =', summarize=20, first_n=3)
+                # Compute feature combinations
+                # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]] = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
+                attn_for_self = K.dot(linear_transf_X, attention_kernel[0])    # (N x 1), [a_1]^T [Wh_i]
+                attn_for_neighs = K.dot(linear_transf_X, attention_kernel[1])  # (N x 1), [a_2]^T [Wh_j]
 
-            # Compute feature combinations
-            # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]] = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
-            attn_for_self = K.dot(linear_transf_X, attention_kernel[0])    # (N x 1), [a_1]^T [Wh_i]
-            attn_for_neighs = K.dot(linear_transf_X, attention_kernel[1])  # (N x 1), [a_2]^T [Wh_j]
+                # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
+                dense = attn_for_self + K.transpose(attn_for_neighs)  # (N x N) via broadcasting
 
-            # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
-            dense = attn_for_self + K.transpose(attn_for_neighs)  # (N x N) via broadcasting
+                # Add nonlinearty
+                dense = LeakyReLU(alpha=0.2)(dense)
 
-            # Add nonlinearty
-            dense = LeakyReLU(alpha=0.2)(dense)
+                # Mask values before activation (Vaswani et al., 2017)
+                comparison = K.equal(A, K.constant(0.))
+                mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
+                masked = dense + mask
 
-            dense = tf.Print(dense, [tf.reduce_max(dense, None), tf.reduce_min(dense, None), dense],
-                         'dense =', summarize=20, first_n=3)
+                # Feed masked values to softmax
+                softmax = K.softmax(masked)  # (N x N), attention coefficients
+                dropout = Dropout(self.attn_dropout)(softmax)  # (N x N)
 
-            # Mask values before activation (Vaswani et al., 2017)
-            comparison = K.equal(A, K.constant(0.))
-            mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
-            masked = dense + mask
+                # Linear combination with neighbors' features
+                node_features = K.dot(dropout, linear_transf_X)  # (N x F')
 
-            masked = tf.Print(masked, [tf.reduce_max(masked, None), tf.reduce_min(masked, None), masked ],
-                         'masked =', summarize=20, first_n=3)
+                if self.attn_heads_reduction == 'concat' and self.activation is not None:
+                    # In case of 'concat', we compute the activation here (Eq 5)
+                    node_features = self.activation(node_features)
 
-            # Feed masked values to softmax
-            softmax = K.softmax(masked)  # (N x N), attention coefficients
+                # Add output of attention head to final output
+                outputs.append(node_features)
 
-            softmax = tf.Print(softmax, [tf.reduce_max(softmax, None), tf.reduce_min(softmax, None), softmax],
-                         'softmax =', summarize=20, first_n=3)
-
-            dropout = Dropout(self.attn_dropout)(softmax)  # (N x N)
-
-            dropout = tf.Print(dropout, [tf.reduce_max(dropout, None), tf.reduce_min(dropout, None), dropout],
-                         'dropout =', summarize=20, first_n=3)
-
-            # Linear combination with neighbors' features
-            node_features = K.dot(dropout, linear_transf_X)  # (N x F')
-
-            node_features = tf.Print(node_features, [tf.reduce_max(node_features, None), tf.reduce_min(node_features, None), node_features],
-                               'node_features  minmax=', summarize=20, first_n=3)
-
-            if self.attn_heads_reduction == 'concat' and self.activation is not None:
-                # In case of 'concat', we compute the activation here (Eq 5)
-                node_features = self.activation(node_features)
-
-            # Add output of attention head to final output
-            outputs.append(node_features)
-
-        # Reduce the attention heads output according to the reduction method
-        if self.attn_heads_reduction == 'concat':
-            output = K.concatenate(outputs)  # (N x KF')
-
-        else:
-            output = K.mean(K.stack(outputs), axis=0)  # N x F')
-            if self.activation is not None:
-                # In case of 'average', we compute the activation here (Eq 6)
-                output = self.activation(output)
+            with tf.name_scope("activations"):
+                # Reduce the attention heads output according to the reduction method
+                if self.attn_heads_reduction == 'concat':
+                    output = K.concatenate(outputs)  # (N x KF')
+                else:
+                    output = K.mean(K.stack(outputs), axis=0)  # N x F')
+                    if self.activation is not None:
+                        # In case of 'average', we compute the activation here (Eq 6)
+                        output = self.activation(output)
+                tf.summary.histogram('activations',output)
 
         return output
 
@@ -393,18 +377,6 @@ class GraphResolutionAttention(Layer):
                         # In case of 'average', we compute the activation here (Eq 6)
                         output = self.activation(output)
                 tf.summary.histogram('activations',output)
-
-            # TENSORBOARD CODE
-            # tf.summary.tensor_summary(
-            #     name="output", tensor=output
-            # ,summary_description="reduced feature activations")
-            #
-            # tf.summary.tensor_summary(
-            #     name="output", tensor=output)
-            #
-            # summaries = tf.GraphKeys.SUMMARIES
-            # merged = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES,
-            #                     scope=None)
 
         return output
 

@@ -13,6 +13,7 @@ import datetime
 import time
 
 # Define parameters
+NOTES = "gat_affinity_baseline"
 DATASET = 'cora' # citeseer, cora
 log_to_tensorboard = True
 MODEL = "GRAT"          # GAT (goes with 'affinity' FILTER)  or GRAT
@@ -23,8 +24,8 @@ L_BIAS = None
 R_BIAS = 3
 N_JOBS = None
 
-# MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
-#     ("GAT",'affinity', None, False, None, None, None) # base implementation
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
+    ("GAT",'affinity', None, False, None, None, None) # base implementation
 
 # MODEL,FILTER,  ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
 # ("GRAT","affinity_k","layerwise", True, None, 10, 1) # our modifications
@@ -40,7 +41,6 @@ MAX_DEGREE = 3  # maximum polynomial degree
 SYM_NORM = True  # symmetric (True) vs. left-only (False) normalization
 NB_EPOCH = 300
 PATIENCE = 40  # early stopping patience
-
 print(f"{'#'*150}\nExperiment description -\n"
       f"\t dataset='{DATASET}'\t model='{MODEL}'\t moments='{FILTER}'\t attn_mode='{ATTN_MODE}'"
       f"\t weigthed_mask={WEIGHT_MASK}\t bias_mat={L_BIAS}\n{'#'*150}")
@@ -132,19 +132,15 @@ wait = 0
 preds = None
 best_val_loss = 99999
 
-# define tensorboard
-# tb = TensorBoard(log_dir=f'./tensorboard_logdir'
-#                  , histogram_freq=1, batch_size=32
-#                  , write_graph=True, write_grads=True
-#                  ,write_images=False, embeddings_freq=0
-#                  ,embeddings_layer_names=None, embeddings_metadata=None)
 
 # Fit
 sess = tf.InteractiveSession()
 tf.global_variables_initializer().run()
 if log_to_tensorboard:
-    metric_writer = tf.summary.FileWriter(f"./tensorboard_logdir/{datetime.datetime.now().strftime('%m-%d-%y %H:%M:%S')}",)
+    metric_writer = tf.summary.FileWriter(f"./tensorboard_logdir/{datetime.datetime.now().strftime('%m-%d-%y %H:%M:%S')}"
+                                          f"_{DATASET}_{NOTES}",)
     test_writer = tf.summary.FileWriter(f"./tensorboard_logdir/test",)
+    graph_dense = graph[1].todense() if scipy.sparse.issparse(graph[1]) else graph[1]
 for epoch in range(1, NB_EPOCH+1):
 
     # Log wall-clock time
@@ -156,20 +152,6 @@ for epoch in range(1, NB_EPOCH+1):
                   , epochs=1, shuffle=False, verbose=0)
     else:
         history = model.fit(graph, y_train, sample_weight=train_mask,batch_size=A.shape[0], epochs=1, shuffle=False, verbose=0)
-
-    # with tf.name_scope("trainable_param"):
-    #     for v in tf.trainable_variables():
-    #         gcn_layer_count = 1
-    #         if "graph_resolution_attention" in v._shared_name:
-    #             with tf.name_scope(f"GCN_layer_{gcn_layer_count}"):
-    #                 att_kernels = []
-    #                 for vv in tf.trainable_variables("graph_resolution_attention_{gcn_layer_count}"):
-    #                     if "kernel" in v._shared_name:
-    #                         tf.summary.histogram('W', v)
-    #                     elif "att_kernel" in v._shared_name:
-    #                         att_kernels.append(v)
-    #                 tf.summary.histogram('att_kernel', att_kernels)
-    #             gcn_layer_count += 1
 
     # Predict on full dataset
     preds = model.predict(graph, batch_size=A.shape[0])
@@ -192,10 +174,8 @@ for epoch in range(1, NB_EPOCH+1):
     summary_train = tf.Summary(value=summary_list)
     if log_to_tensorboard:
         metric_writer.add_summary(summary_train, epoch)
-
         merged = tf.summary.merge_all()
-        ## TODO: eval merged summary
-        trainable_summary = merged.eval(session=sess, feed_dict={G[0]: graph[1], X_in: graph[0]})
+        trainable_summary = merged.eval(session=sess, feed_dict={G[0]: graph_dense , X_in: graph[0]})
         metric_writer.add_summary(trainable_summary, epoch)
 
     print("Epoch: {:04d}".format(epoch),
