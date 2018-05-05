@@ -17,7 +17,7 @@ import sys
 import networkx as nx
 from tqdm import tqdm
 import os
-from scipy.sparse.linalg.eigen.arpack import eigsh
+from scipy.sparse.linalg.eigen.arpack import eigsh, ArpackNoConvergence
 import tensorflow as tf
 
 """
@@ -46,7 +46,7 @@ def load_data(dataset_str):
     print('Loading {} dataset...'.format(dataset_str))
 
     FILE_PATH = os.path.abspath(__file__)
-    DIR_PATH = os.path.dirname(FILE_PATH)
+    DIR_PATH = FILE_PATH.split('src')[0]
     DATA_PATH = os.path.join(DIR_PATH, f'data/{dataset_str}/')
 
     names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']

@@ -1,11 +1,14 @@
 from __future__ import absolute_import
+
 import warnings
-from keras import backend as K
-from keras import activations, constraints, initializers, regularizers
-from keras.layers import Layer, Dropout, LeakyReLU
-from utils import variable_summaries
+
 import tensorflow as tf
-import numpy as np
+from keras import activations, constraints, initializers, regularizers
+from keras import backend as K
+from keras.layers import Layer, Dropout, LeakyReLU
+
+from src.utils import variable_summaries
+
 
 class GraphAttention(Layer):
 
@@ -115,8 +118,7 @@ class GraphAttention(Layer):
                 dense = LeakyReLU(alpha=0.2)(dense)
 
                 # Mask values before activation (Vaswani et al., 2017)
-                comparison = K.equal(A, K.constant(0.))
-                mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
+                mask = K.exp(A * -10e9) * -10e9
                 masked = dense + mask
 
                 # Feed masked values to softmax
@@ -329,8 +331,7 @@ class GraphResolutionAttention(Layer):
                     #   2. K.max(dense * mask, axis=2) # take highest value of dense * mask
                     #   3. dense[K.max(mask, axis=2)] # take value of most informative scale
                     #   4. Try max instead of mean in the 'softmax=..' piece
-                    comparison = K.equal(A, K.constant(0.))
-                    mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
+                    mask = K.exp(A * -10e9) * -10e9
                     masked = activations.softmax(dense + mask,axis=0) # what is the right axis to softmax? probably both
                     softmax = K.max(masked, axis=2)  # a_{i,j} importance is decided by the 2nd axis mean
                 else:
@@ -348,8 +349,7 @@ class GraphResolutionAttention(Layer):
                         dense = dense * A
 
                     # Mask values before activation (Vaswani et al., 2017)
-                    comparison = K.equal(A, K.constant(0.))
-                    mask = K.switch(comparison, K.ones_like(A) * -10e9, K.zeros_like(A))
+                    mask = K.exp(A * -10e9) * -10e9
                     masked = tf.tensordot(dense + mask, self.resolution_kernel, axes=[2, 0]) # (N x N), attention coefficients
 
                     # Feed masked values to softmax

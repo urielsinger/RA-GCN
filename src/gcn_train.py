@@ -1,14 +1,14 @@
 from __future__ import print_function
 
+import time
+
+from graph import GraphConvolution, GraphResolutionConvolution
 from keras.layers import Input, Dropout
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.regularizers import l2
 
-from graph import GraphConvolution,GraphResolutionConvolution
-from utils import *
-
-import time
+from src.utils import *
 
 # Define parameters
 MODEL = "gcn" # gcn or grcn

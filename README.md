@@ -1,6 +1,7 @@
 ## 2DO
 - [ ] Modify attention similarity in $a^T(Wh_j||Wh_i)$
 - [ ] Test normalized attention
+- [ ] Check matrix-wise softmax in the activation
 - [ ] Try different comparison like zeroing nonlikely paths.
 - [ ] Using mask values will probably dump values very low. Some variations can be tested
     1. comparison = K.less_equal(A, K.const(1e-15))

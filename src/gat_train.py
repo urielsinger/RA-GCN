@@ -1,34 +1,32 @@
 from __future__ import print_function
 
+import datetime
+import time
+
 from keras.layers import Input, Dropout
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.regularizers import l2
-from multiprocessing import cpu_count
-from graph_attention_layer import GraphAttention,GraphResolutionAttention
-from keras.callbacks import TensorBoard
 from utils import *
-import datetime
 
-import time
+from src.graph_attention_layer import GraphAttention, GraphResolutionAttention
 
 # Define parameters
-NOTES = "gat_affinity_baseline"
+NOTES = "grat_noamuriel_layerwiseattn_20bias_noweight"
 DATASET = 'cora' # citeseer, cora
 log_to_tensorboard = True
 MODEL = "GRAT"          # GAT (goes with 'affinity' FILTER)  or GRAT
 FILTER = 'noamuriel'    # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
-ATTN_MODE = "full"      # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
+ATTN_MODE = "layerwise"      # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
 WEIGHT_MASK = False
-L_BIAS = None
+L_BIAS = 20
 R_BIAS = 3
-N_JOBS = None
+N_JOBS = 1
 
 MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
     ("GAT",'affinity', None, False, None, None, None) # base implementation
+NOTES = "gat_baseline"
 
-# MODEL,FILTER,  ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
-# ("GRAT","affinity_k","layerwise", True, None, 10, 1) # our modifications
 
 # MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention
@@ -65,6 +63,7 @@ if FILTER == 'affinity':
     """ As in the original paper, A is the affinity matrix """
     print('Using plain affinity matrix filters...')
     support = 1
+    A = A + np.eye(A.shape[0])  # Add self-loops
     graph = [X, A]
     G = [Input(shape=(None, None), batch_shape=(None, None), sparse=False)]
 
