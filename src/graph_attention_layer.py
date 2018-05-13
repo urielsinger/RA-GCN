@@ -269,17 +269,17 @@ class GraphResolutionAttention(Layer):
             self.attn_kernels.append([attn_kernel_self, attn_kernel_neighs])
 
         # FIXME: add resolution kernel for each attention head
-        if self.attn_mode == 'layerwise':
+        if self.attn_mode == 'layerwise' and self.num_hops > 1:
             self.resolution_kernel = self.add_weight(shape=(self.num_hops,),
                                                      initializer=self.resolution_attn_kernel_initializer,
                                                      name='resolution_att_kernel',
                                                      regularizer=self.resolution_attn_kernel_regularizer,
                                                      constraint=self.resolution_attn_kernel_constraint)
 
-        elif self.attn_mode == 'full':
+        elif self.attn_mode in ['full', 'layerwise']:
             pass
         else:
-            raise ValueError("insuitable attention mode")
+            raise ValueError("insuitable attention model for GRAT mode")
 
         self.built = True
 
@@ -287,12 +287,9 @@ class GraphResolutionAttention(Layer):
         X = inputs[0]  # Node features (N x F)
         A = inputs[1]  # k-Adjacency matrices (N x N x k)
 
-        # Parameters
-        N = K.shape(X)[0]  # Number of nodes in the graph
-
+        k_repeat = lambda x: K.repeat_elements(K.expand_dims(x, axis=-1), rep = self.num_hops, axis = 2)
         with tf.name_scope(self.gcn_layer_name):
             outputs = []
-            k_repeat = lambda x: K.repeat_elements(K.expand_dims(x, axis=-1), rep = self.num_hops, axis = 2)
             for head in range(self.attn_heads):
                 with tf.name_scope(f'kernel_{head}'):
                     kernel = self.kernels[head]  # W in the paper (F x F')
@@ -332,17 +329,16 @@ class GraphResolutionAttention(Layer):
                     #   3. dense[K.max(mask, axis=2)] # take value of most informative scale
                     #   4. Try max instead of mean in the 'softmax=..' piece
                     mask = K.exp(A * -10e9) * -10e9
-                    masked = activations.softmax(dense + mask,axis=0) # what is the right axis to softmax? probably both
-                    softmax = K.max(masked, axis=2)  # a_{i,j} importance is decided by the 2nd axis mean
-                else:
+                    masked = activations.softmax(dense + mask,axis=1) # what is the right axis to softmax? probably both
+                    softmax = K.mean(masked, axis=2)  # a_{i,j} importance is decided by the 2nd axis mean
+                elif self.attn_mode in ["layerwise", "gat"]:
                     # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
                     dense = attn_for_self + K.transpose(attn_for_neighs)  # (N x N) via broadcasting
 
                     # Add nonlinearty
                     dense = LeakyReLU(alpha=0.2)(dense)
-                    dense = k_repeat(dense) # inflate dense dimension repeat
-                    # dense = K.expand_dims(dense, axis=2)  # we add the extra dimension:
-                    # dense = K.repeat_elements(dense, rep=self.num_hops, axis=2)  # we replicate the elements
+                    if self.num_hops > 1:
+                        dense = k_repeat(dense) # inflate dense dimension repeat
 
                     if self.weight_mask == True:
                         # masking with weights of path (giving structure additional meaning)
@@ -350,7 +346,10 @@ class GraphResolutionAttention(Layer):
 
                     # Mask values before activation (Vaswani et al., 2017)
                     mask = K.exp(A * -10e9) * -10e9
-                    masked = tf.tensordot(dense + mask, self.resolution_kernel, axes=[2, 0]) # (N x N), attention coefficients
+                    if self.attn_mode == "layerwise" and self.num_hops > 1:
+                        masked = tf.tensordot(dense + mask, self.resolution_kernel, axes=[2, 0]) # (N x N), attention coefficients
+                    elif self.num_hops ==  1:
+                        masked = dense + mask
 
                     # Feed masked values to softmax
                     softmax = K.softmax(masked)  # (N x N), attention coefficients
@@ -378,7 +377,7 @@ class GraphResolutionAttention(Layer):
                         output = self.activation(output)
                 tf.summary.histogram('activations',output)
 
-        return output
+            return output
 
     def compute_output_shape(self, input_shape):
         output_shape = input_shape[0][0], self.output_dim

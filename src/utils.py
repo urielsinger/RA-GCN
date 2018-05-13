@@ -225,7 +225,7 @@ def get_adjointed_l_bias(X, A, l = None, radius = 5, sparseflag = False, n_jobs 
         return []
     else:
         FILE_PATH = os.path.abspath(__file__)
-        DIR_PATH = os.path.dirname(FILE_PATH)
+        DIR_PATH = FILE_PATH.split('src')[0]
         DATA_PATH = os.path.join(DIR_PATH, fr'data/{cache}/cache')
         if not os.path.isdir(DATA_PATH):
             os.mkdir(DATA_PATH)
@@ -343,7 +343,9 @@ def noamuriel_polynomial(A, k, to_tensor=False):
     print("Calculating noamuriel polynomials up to order {}...".format(k))
 
     A_k = list()
-    A_k.append(sp.eye(A.shape[0]).tocsr())
+    # TODO: A already includes I in the normalization. It is possible that adding this "first order" eye
+    # causes trouble
+    # A_k.append(sp.eye(A.shape[0]).tocsr())
     A_k.append(A)
 
     def noamuriel_recurrence(T_k_minus_one, X):
@@ -353,7 +355,7 @@ def noamuriel_polynomial(A, k, to_tensor=False):
     for i in range(2, k+1):
         A_k.append(noamuriel_recurrence(A_k[-1], A))
 
-    if to_tensor:
+    if to_tensor and len(A_k) > 1:
         # def convert_sparse_matrix_to_sparse_tensor(X):
         #     coo = X.tocoo().astype(np.float32)
         #     indices = np.mat([coo.row, coo.col]).transpose()
