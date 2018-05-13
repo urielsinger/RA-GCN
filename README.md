@@ -13,4 +13,11 @@
 ### refractoring and optimization
 - [ ] Make the summaries and tfboard optional
 
-###
+### upcomming experiments:
++ GAT layerwise support=3 (w/wo weight) noamuriel
++ GCN layerwise support 3 noamuriel
++ sofmax change - softmax = softmax/K.sum(softmax,axis=-1,keepdims=True)
++ noamuriel + I -
+print(f'Using {FILTER} polynomial basis filters...')
+    A_norm = preprocess_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A+scipy.sparse.eye(A.shape[0])
+    A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
