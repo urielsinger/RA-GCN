@@ -412,10 +412,10 @@ def preprocess_features(features):
 #     return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt).tocoo()
 
 
-def preprocess_adj(adj):
-    """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
-    adj_normalized = normalize_adj(adj + sp.eye(adj.shape[0]))
-    return sparse_to_tuple(adj_normalized)
+# def preprocess_adj(adj):
+#     """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
+#     adj_normalized = normalize_adj(adj + sp.eye(adj.shape[0]))
+#     return sparse_to_tuple(adj_normalized)
 
 def adj_to_bias(adj, sizes, nhood=1):
     nb_graphs = adj.shape[0]

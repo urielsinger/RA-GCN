@@ -331,6 +331,7 @@ class GraphResolutionAttention(Layer):
                     mask = K.exp(A * -10e9) * -10e9
                     masked = activations.softmax(dense + mask,axis=1) # what is the right axis to softmax? probably both
                     softmax = K.mean(masked, axis=2)  # a_{i,j} importance is decided by the 2nd axis mean
+                    softmax = softmax / K.sum(softmax, axis=-1, keepdims=True)
                 elif self.attn_mode in ["layerwise", "gat"]:
                     # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
                     dense = attn_for_self + K.transpose(attn_for_neighs)  # (N x N) via broadcasting

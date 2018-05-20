@@ -14,25 +14,27 @@ from src.graph_attention_layer import GraphAttention, GraphResolutionAttention
 RESULTS_PATH= "./notebook/results.csv"
 
 # Define parameters
-benchmark = {"repeats":10, "log_notes":"noweight_nobias_fullattn_"} # None
-log_to_tensorboard = False if benchmark == None else False
-FREENOTES = "reproduce_with_GRAT"
+benchmark = {"repeats":10, "log_notes":"grat_nu_lw_weight"} # None
+benchmark = None
+log_to_tensorboard = True if benchmark == None else False
+
+FREENOTES = ""
 DATASET = 'cora' # citeseer, cora
 MODEL = "GRAT"          # GAT (goes with 'affinity' FILTER)  or GRAT
-FILTER = 'affinity_k'    # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
-ATTN_MODE = "full"      # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
+FILTER = 'noamuriel'    # 'localpool','chebyshev' ,'noamuriel' , 'affinity', 'affinity_k'
+ATTN_MODE = "layerwise"      # 'layerwise' (1 x K) :: 'full' (2F' x K) :: 'gat' (2F' x 1)
 WEIGHT_MASK = False
-L_BIAS = None
+L_BIAS = 20
 R_BIAS = 3
 N_JOBS = 1
 MAX_DEGREE = 3  # maximum polynomial degree
-NOTES = f"{MODEL}_{FILTER}_maxdeg{MAX_DEGREE}_{ATTN_MODE}attn_{str(L_BIAS)}bias_weightMask{str(WEIGHT_MASK)[0]}" + FREENOTES
+NOTES = f"{MODEL}_{FILTER}_maxdeg{MAX_DEGREE}_{ATTN_MODE}attn_{str(L_BIAS)}bias_weight{str(WEIGHT_MASK)[0]}" + FREENOTES
 benchmark = dict(repeats=1) if benchmark == None else benchmark
-NOTES = "BASELINE_GRAT"
+# NOTES = "BASELINE_GRAT"
 
-# MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
-#     ("GAT",'affinity', None, False, None, None, None) # base implementation
-# NOTES = "BASELINE_GAT"
+MODEL, FILTER, ATTN_MODE, WEIGHT_MASK, L_BIAS, R_BIAS, N_JOBS = \
+    ("GAT",'affinity', None, False, None, None, None) # base implementation
+NOTES = "cora_BASELINE_GAT"
 
 # MODEL = "GAT" # GAT (goes with 'affinity' FILTER)  or GRAT
 # specifies the type of attention
@@ -96,7 +98,7 @@ elif FILTER == 'chebyshev':
 elif FILTER in ['noamuriel','affinity_k']:
     """ noamuriel polynomial basis filters (Defferard et al., NIPS 2016)  """
     print(f'Using {FILTER} polynomial basis filters...')
-    A_norm = normalize_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A+scipy.sparse.eye(A.shape[0])
+    A_norm = preprocess_adj(A, SYM_NORM) if FILTER == 'noamuriel' else A+scipy.sparse.eye(A.shape[0])
     A_k = noamuriel_polynomial(A_norm, MAX_DEGREE, to_tensor=True)
     if L_BIAS is not None:
         A_k = [np.transpose(np.array([A.todense() for A in A_k]), [1,2,0])] if MAX_DEGREE == 1 else A_k
@@ -113,8 +115,8 @@ else:
     raise Exception('Invalid filter type.')
 
 
+X_in = Input(shape=(X.shape[1],))
 def compile_model():
-    X_in = Input(shape=(X.shape[1],))
 
     # Define model architecture
     # NOTE: We pass arguments for graph convolutional layers as a list of tensors.
@@ -224,7 +226,7 @@ for r in range(benchmark["repeats"]):
     model = compile_model()
     wait = 0
 
-if benchmark is not None:
+if benchmark["repeats"] > 1:
     results = pd.read_csv(RESULTS_PATH) if os.path.isfile(RESULTS_PATH) else pd.DataFrame()
     results[benchmark["log_notes"]] = np.array(results_list)[:, 1]
     col2save = list(filter(lambda s: 'Unnamed' not in s, results.columns))
