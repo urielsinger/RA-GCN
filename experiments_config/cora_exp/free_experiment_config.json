@@ -1,0 +1,13 @@
+{
+"DATASET": "cora",
+"MODEL": "GRAT",
+"FILTER": "noamuriel",
+"ATTN_MODE": "layerwise",
+"WEIGHT_MASK": false,
+"L_BIAS": 20,
+"R_BIAS": 3,
+"N_JOBS": 1,
+"MAX_DEGREE": 3,
+"NOTES": null,
+"FREENOTES": ""
+}

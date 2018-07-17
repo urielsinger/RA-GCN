@@ -1,0 +1,15 @@
+{
+  "DATASET": "cora",
+  "MODEL": "GAT",
+  "FILTER": "affinity",
+  "ATTN_MODE": null,
+  "WEIGHT_MASK": false,
+  "L_BIAS": null,
+  "R_BIAS": null,
+  "N_JOBS": null,
+  "MAX_DEGREE": null,
+  "NOTES": "BASELINE_GAT",
+  "FREENOTES": ""
+}
+
+

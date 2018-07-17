@@ -124,8 +124,8 @@ def encode_onehot(labels):
     return labels_onehot
 
 
-def load_data_cora(path="data", dataset="cora"):
-    """Load citation network dataset (cora only for now)"""
+def load_data_cora(path="data", dataset="cora_exp"):
+    """Load citation network dataset (cora_exp only for now)"""
     print('Loading {} dataset...'.format(dataset))
 
     try:

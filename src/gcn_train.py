@@ -15,7 +15,7 @@ benchmark = {"repeats":10, "log_notes":"gcn_baseline"} # None
 benchmark = dict(repeats=1) if benchmark == None else benchmark
 RESULTS_PATH= "../notebook/results.csv"
 MODEL = "gcn" # gcn or grcn
-DATASET = 'cora'
+DATASET = 'cora_exp'
 FILTER = 'localpool'
 # FILTER = 'localpool'  # 'localpool','chebyshev'
 MAX_DEGREE = 3  # maximum polynomial degree

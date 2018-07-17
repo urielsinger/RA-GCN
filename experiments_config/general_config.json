@@ -1,0 +1,13 @@
+{
+  "dropout_rate": 0.6,
+  "l2_reg": 5e-4,
+  "F_":8,
+  "n_attn_heads_1": 8,
+  "attn_heads_reduction_1": "concat",
+  "activation":"relu",
+  "n_attn_heads_2":1,
+  "attn_heads_reduction_2": "concat",
+  "epochs":2000,
+  "patience":100,
+  "num_hops":1
+}

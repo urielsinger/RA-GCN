@@ -1,5 +1,6 @@
 ## 2DO
 ### model
+- [ ] Find why BIAS has performance dump
 - [ ] Modify attention similarity in $a^T(Wh_j||Wh_i)$
 - [ ] Test normalized attention
 - [ ] Get citeseer test to work
@@ -11,8 +12,6 @@
     3. Take value of most informative scale
 
 ### refractoring and optimization
-- [ ] Make the summaries and tfboard optional
+- [X] Make the summaries and tfboard optional
 
 ### upcomming experiments:
-+ [X] GAT layerwise support=3 (w/wo weight) noamuriel
-+ [ ] GCN layerwise support 3 noamuriel
