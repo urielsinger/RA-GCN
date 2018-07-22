@@ -65,7 +65,7 @@ class GraphAttention(K.layers.Layer):
         # Initialize kernels for each attention head
         for head in range(self.attn_heads):
             # Layer kernel
-            kernel = self.add_weight(shape=(F, self.F_),
+            kernel = self.add_weight(shape=(F.value, self.F_),
                                      initializer=self.kernel_initializer,
                                      name='kernel_%s' % head,
                                      regularizer=self.kernel_regularizer,
@@ -91,7 +91,7 @@ class GraphAttention(K.layers.Layer):
         A = inputs[1]  # Adjacency matrix (N x N)
 
         # Parameters
-        N = K.shape(X)[0]  # Number of nodes in the graph
+        # N = K.shape(X)[0]  # Number of nodes in the graph
 
         with tf.name_scope(self.gcn_layer_name):
             outputs = []
@@ -103,7 +103,7 @@ class GraphAttention(K.layers.Layer):
                 with tf.name_scope(f'attention_{head}'):
                     # Compute inputs to attention network
                     attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F' x 1)
-                    variable_summaries(attention_kernel[head])
+                    # variable_summaries(attention_kernel[head])
 
                 linear_transf_X = K.backend.dot(X, kernel)  # (N x F')
 
@@ -222,7 +222,7 @@ class GraphResolutionAttention(K.layers.Layer):
         # Initialize kernels for each attention head
         for head in range(self.attn_heads):
             # Layer kernel
-            kernel = self.add_weight(shape=(F, self.F_),
+            kernel = self.add_weight(shape=(F.value, self.F_),
                                      initializer=self.kernel_initializer,
                                      name='kernel_%s' % head,
                                      regularizer=self.kernel_regularizer,

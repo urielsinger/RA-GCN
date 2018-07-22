@@ -23,7 +23,7 @@ config_path= fr"experiments_config/cora_exp/{confing_name}.json"
 general_config_path= fr"experiments_config/general_config.json"
 benchmark = None # None avoids logging
 # benchmark = {"repeats":1, "log_notes":"grat_nu_lw_weight"} # None
-debug_mode = True # uses eager_execution
+debug_mode = False# uses eager_execution
 
 log_to_tensorboard = False if benchmark == None else False
 benchmark = dict(repeats=1) if benchmark == None else benchmark
@@ -74,7 +74,7 @@ def _build_model_input(A_matrix):
         support = 1
         A_matrix = A_matrix + np.eye(A_matrix.shape[0])  # Add self-loops
         graph = [X, A_matrix]
-        G = [K.Input(shape=(None, None), sparse=False)]
+        G = [K.Input(batch_shape=(None, None), sparse=False)]
 
     elif config_param['FILTER'] == 'localpool':
         """ Local pooling filters (see 'renormalization trick' in Kipf & Welling, arXiv 2016) """
@@ -82,7 +82,7 @@ def _build_model_input(A_matrix):
         A_matrix_ = preprocess_adj(A_matrix, SYM_NORM)
         support = 1
         graph = [X, A_matrix_]
-        G = [K.Input(shape=(None, None), sparse=True)]
+        G = [K.Input(batch_shape=(None, None), sparse=True)]
 
     elif config_param['FILTER'] == 'chebyshev':
         """ Chebyshev polynomial basis filters (Defferard et al., NIPS 2016)  """
@@ -96,7 +96,7 @@ def _build_model_input(A_matrix):
             T_k = [np.concatenate((T_k[0] ,np.expand_dims(Bias, axis=-1)), axis=-1)]
         graph = [X] + T_k
         support = config_param['MAX_DEGREE'] + 1 if config_param['L_BIAS'] is None else config_param['MAX_DEGREE'] + 2
-        G = [K.Input(shape=(None, None), sparse=True) for _ in range(support)]
+        G = [K.Input(batch_shape=(None, None), sparse=True) for _ in range(support)]
 
     elif config_param['FILTER'] in ['noamuriel','affinity_k']:
         """ noamuriel polynomial basis filters (Defferard et al., NIPS 2016)  """
@@ -110,9 +110,9 @@ def _build_model_input(A_matrix):
         graph = [X] + A_k
         support = config_param['MAX_DEGREE'] if config_param['L_BIAS'] is None else config_param['MAX_DEGREE'] + 1
         if support ==1:
-            G = [K.Input(shape=(None, None), sparse=False)]
+            G = [K.Input(batch_shape=(None, None), sparse=False)]
         else:
-            G = [K.Input(shape=(None, None, support), sparse=False)]
+            G = [K.Input(batch_shape=(None, None, support), sparse=False)]
 
     else:
         raise Exception('Invalid filter type.')
@@ -148,7 +148,8 @@ def compile_model():
 
     # Compile model
     model = K.Model(inputs=[X_in] + G, outputs=Y)
-    model.compile(loss='categorical_crossentropy', optimizer=K.optimizers.Adam(lr=0.01))
+    # model.compile(loss='categorical_crossentropy', optimizer=K.optimizers.Adam(lr=0.01))
+    model.compile(loss='categorical_crossentropy', optimizer=tf.train.AdamOptimizer(learning_rate=0.01))
     return model
 
 # Helper variables for main training loop
@@ -182,7 +183,7 @@ for r in range(benchmark["repeats"]):
 
         # Single training iteration (we mask nodes without labels for loss calculation)
         if epoch%10 == 0:
-            model.fit(graph, y_train, sample_weight=train_mask,batch_size=A.shape[0]
+            model.fit(x=graph, y=y_train, sample_weight=train_mask,batch_size=A.shape[0]
                       , epochs=1, shuffle=False, verbose=0)
         else:
             history = model.fit(graph, y_train, sample_weight=train_mask,batch_size=A.shape[0], epochs=1, shuffle=False, verbose=0)
